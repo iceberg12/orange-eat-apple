@@ -1,3 +1,5 @@
 *.csv
 .DS_Store
 .ipynb_checkpoints
+AutoML*
+catboost_info*
