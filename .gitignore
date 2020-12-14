@@ -1,5 +1,11 @@
-*.csv
 .DS_Store
 .ipynb_checkpoints
-AutoML*
+.vscode/*
+
+processed_data_checkpoint/*
+AutoML_*
 catboost_info*
+utils/__pycache__
+
+**/*.log
+# **/settings.json
