@@ -124,13 +124,13 @@ def train_model(df, target='is_returning_customer', save_path='models/nn_latest.
         model.add(Dense(128,# kernel_regularizer=regularizers.l2(0.0001),
                     activation='elu', input_shape=(len(features), ))) # Rectified Linear Unit Activation Function
         model.add(Dropout(0.2))
-        model.add(Dense(128,
+        model.add(Dense(128,# kernel_regularizer=regularizers.l2(0.0001),
                     activation='elu')) # Rectified Linear Unit Activation Function
         model.add(Dropout(0.2))
-        model.add(Dense(128,
+        model.add(Dense(128,# kernel_regularizer=regularizers.l2(0.0001),
                     activation='elu')) # Rectified Linear Unit Activation Function
         model.add(Dropout(0.2))
-        model.add(Dense(128,
+        model.add(Dense(128,# kernel_regularizer=regularizers.l2(0.0001),
                     activation='elu')) # Rectified Linear Unit Activation Function
         model.add(Dropout(0.2))
         model.add(Dense(2, activation = 'softmax')) # Softmax for multi-class classification
