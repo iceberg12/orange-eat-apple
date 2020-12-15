@@ -8,11 +8,18 @@ from dateutil.relativedelta import relativedelta
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
-# from pycaret.classification import *
-from catboost import CatBoostClassifier, Pool
-
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
+from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder
 from pickle import dump, load
+
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+from keras.callbacks import EarlyStopping
+from tensorflow.keras import regularizers
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.models import load_model
+from keras.utils import np_utils
 
 def load_data():
     """Load data.
@@ -74,9 +81,10 @@ def preprocessing(df_order, features=[]):
     for col in features:
         if col not in data.columns:
             data[col] = 0
+
     return data
 
-def train_model(df, target='', save_path='models/catboost_manual_latest.json'):
+def train_model(df, target='is_returning_customer', save_path='models/nn_latest.json'):
     """[Train model]
 
     Args:
@@ -87,50 +95,71 @@ def train_model(df, target='', save_path='models/catboost_manual_latest.json'):
     """
     features = [s for s in df.columns if s not in ['customer_id', target]]
     dump(features, open('models/featureList.pkl', 'wb'))
-    
-    # Try PyCaret
-    # scaler = MinMaxScaler()
-    # # fit and save scaler on the training dataset
-    # df[features] = scaler.fit_transform(df[features])
-    # dump(scaler, open('scaler.pkl', 'wb'))
-    # clf_setup = setup(df, 
-    #     target = target, 
-    #     numeric_features=features,
-    #     # fix_imbalance=True,
-    #     data_split_stratify=True,
-    #     fold_strategy='stratifiedkfold',
-    #     html=False, silent=True, verbose=True)
-    # add_metric('logloss', 'logloss', log_loss, greater_is_better = False)
-    # best = compare_models(exclude=['xgboost'], fold=5, errors='ignore', sort='Log Loss')
-    # # Best model: ? taking a bit long time. Will try if have more time.
 
     seed = 12
-    X = df[['customer_id'] + features]
+    X = df[['customer_id'] + features].fillna(1)
     y = df[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, 
         stratify=y, 
         test_size=0.05, 
         random_state=seed)
     test_customer_id = set(X_test.customer_id)
-    train_pool = Pool(X_train[features], y_train)
-    val_pool = Pool(X_test[features], y_test) 
-    # train model
-    model = CatBoostClassifier(iterations=5000,
-        learning_rate=0.01,
-        loss_function='Logloss',
-        # auto_class_weights='Balanced',
-        verbose=100)
-    model.fit(train_pool,
-        eval_set=val_pool,
-        early_stopping_rounds=500,
-        use_best_model=False)
+    X_train = X_train[features].values
 
+    scaler = MinMaxScaler()
+    X_train = scaler.fit_transform(X_train)
+    dump(scaler, open('models/scaler.pkl', 'wb'))
+
+    # y_train = y_train.values
+    # encode class values as integers
+    encoder = LabelEncoder()
+    encoded_labels = encoder.fit_transform(y_train)
+    # convert integers to OneHot variables
+    onehot_labels = np_utils.to_categorical(encoded_labels)
+
+    def nn_model():
+
+        # Create model here
+        model = Sequential()
+        model.add(Dense(128,# kernel_regularizer=regularizers.l2(0.0001),
+                    activation='elu', input_shape=(len(features), ))) # Rectified Linear Unit Activation Function
+        model.add(Dropout(0.2))
+        model.add(Dense(128,
+                    activation='elu')) # Rectified Linear Unit Activation Function
+        model.add(Dropout(0.2))
+        model.add(Dense(128,
+                    activation='elu')) # Rectified Linear Unit Activation Function
+        model.add(Dropout(0.2))
+        model.add(Dense(128,
+                    activation='elu')) # Rectified Linear Unit Activation Function
+        model.add(Dropout(0.2))
+        model.add(Dense(2, activation = 'softmax')) # Softmax for multi-class classification
+
+        # Compile model here
+        model.compile(loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['accuracy'])
+        
+        return model
+    
+    # For tuning NN architecture
+    estimator = KerasClassifier(build_fn=nn_model, 
+        epochs=50, 
+        batch_size=128, 
+        callbacks=[EarlyStopping(monitor='val_categorical_crossentropy', patience=5)],
+        verbose=True
+        )
+    skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=12)
+    # fit on one fold
+    for train, test in skfold.split(X_train, y_train):
+        estimator.fit(X_train[train], onehot_labels[train], 
+            validation_data=(X_train[test], onehot_labels[test]),
+            )
+        break
+    # Got log loss 0.4749
+
+    # estimator.model.summary()
     if save_path != '':
-        model.save_model(save_path,
-            format='json',
-            export_parameters=None,
-            pool=None)
-    return model, test_customer_id
+        estimator.model.save(save_path)
+    return estimator.model, test_customer_id
 
 def predict(df_order_test):
     """[Predict on test data and save to a file named result.csv.]
@@ -139,15 +168,15 @@ def predict(df_order_test):
         filename (str): [test data path]. Defaults to 'sample_test.csv'.
     """
     features = load(open('models/featureList.pkl', 'rb'))
+    X_test = df_order_test[features].values
+    scaler = load(open('models/scaler.pkl', 'rb'))
+    X_test = scaler.transform(X_test)
 
-    X_test = df_order_test[features]
-
-    model_saved = CatBoostClassifier()
-    model_saved.load_model('models/catboost_manual.json', format='json')
+    model_saved = load_model('models/nn_latest.json')
     
-    preds_probs = model_saved.predict_proba(X_test)
-    preds_probs_1 = [x[1] for x in preds_probs]
-    preds_class = model_saved.predict(X_test)
+    preds_probs = model_saved.predict(X_test)
+    preds_probs_1 = [x[1] if not pd.isna(x[1]) else 0 for x in preds_probs]
+    preds_class = np.argmax(preds_probs, axis=1)
     df_order_test['is_returning_customer'] = preds_class
     df_order_test['is_returning_customer_probs'] = preds_probs_1
     result = df_order_test[['customer_id', 'is_returning_customer', 'is_returning_customer_probs']]
