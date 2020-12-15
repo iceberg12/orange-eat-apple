@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
-from pycaret.classification import *
+# from pycaret.classification import *
 from catboost import CatBoostClassifier, Pool
 
 from sklearn.preprocessing import MinMaxScaler
@@ -35,7 +35,8 @@ def load_data():
     df_order = df_order[last_one_year <= df_order.order_date].reset_index(drop=True)
     
     df_label = pd.read_csv('data/machine_learning_challenge_labeled_data.csv')
-
+    avail_customer_id = set(df_order.customer_id.unique())
+    df_label = df_label[df_label.customer_id.isin(avail_customer_id)].reset_index(drop=True)
     return df_order, df_label, onehot_features
 
 def preprocessing(df_order, features=[]):
@@ -75,7 +76,7 @@ def preprocessing(df_order, features=[]):
             data[col] = 0
     return data
 
-def train_model(df, target=''):
+def train_model(df, target='', save_path='models/catboost_manual_latest.json'):
     """[Train model]
 
     Args:
@@ -104,15 +105,15 @@ def train_model(df, target=''):
     # # Best: ?
 
     seed = 12
-    X = df[features]
-    y = df['is_returning_customer']
+    X = df[['customer_id'] + features]
+    y = df[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, 
         stratify=y, 
-        test_size=0.2, 
+        test_size=0.05, 
         random_state=seed)
-
-    train_pool = Pool(X_train, y_train)
-    val_pool = Pool(X_test, y_test) 
+    test_customer_id = set(X_test.customer_id)
+    train_pool = Pool(X_train[features], y_train)
+    val_pool = Pool(X_test[features], y_test) 
     # train model
     model = CatBoostClassifier(iterations=5000,
         learning_rate=0.01,
@@ -121,14 +122,15 @@ def train_model(df, target=''):
         verbose=100)
     model.fit(train_pool,
         eval_set=val_pool,
-        early_stopping_rounds=100,
+        early_stopping_rounds=500,
         use_best_model=False)
 
-    model.save_model('models/catboost_manual_latest.json',
-        format='json',
-        export_parameters=None,
-        pool=None)
-    return
+    if save_path != '':
+        model.save_model(save_path,
+            format='json',
+            export_parameters=None,
+            pool=None)
+    return model, test_customer_id
 
 def predict(df_order_test):
     """[Predict on test data and save to a file named result.csv.]
@@ -150,47 +152,46 @@ def predict(df_order_test):
     df_order_test['is_returning_customer_probs'] = preds_probs_1
     result = df_order_test[['customer_id', 'is_returning_customer', 'is_returning_customer_probs']]
 
-    print('Saving prediction output to data/result.csv ...')
-    result.to_csv('data/result.csv', index=False)
-    print('Done.')
-    return
+    return result
 
-def create_unittest_data(df_order, df_label):
-    seed = 12 
-    _, df_label_test = train_test_split(df_label,
-        stratify=df_label.is_returning_customer, 
-        test_size=0.01, 
-        random_state=seed)
+def create_unittest_data(df_order, df_label, test_customer_id):
+
+    df_order_test = df_order[df_order.customer_id.isin(test_customer_id)]
+    df_label_test = df_label[df_label.customer_id.isin(test_customer_id)]
     
-    test_id = set(df_label_test.customer_id)
-
-    df_order_test = df_order[df_order.customer_id.isin(test_id)]
     df_order_test.to_csv('data/df_order_test.csv', index=False)
     df_label_test.to_csv('data/df_label_test.csv', index=False)
-    pass
+    return
 
-if __name__ == '__main__':
-    mode = sys.argv[1]
+# if __name__ == '__main__':
+#     mode = sys.argv[1]
     
-    if mode == 'train':
-        df_order, df_label, onehot_features = load_data()
-        create_unittest_data(df_order, df_label)
-        data = preprocessing(df_order, onehot_features)
-        data = data.merge(df_label, on='customer_id')
+#     if mode == 'train':
+#         df_order, df_label, onehot_features = load_data()
+#         data = preprocessing(df_order, onehot_features)
+#         data = data.merge(df_label, on='customer_id')
 
-        train_model(data, target='is_returning_customer')
+#         print('Training model and creating test cases ...')
+#         _, test_customer_id = train_model(data, target='is_returning_customer')
+#         create_unittest_data(df_order, df_label, test_customer_id)
+#         print('Done')
 
-    if mode == 'predict':
-        filename = sys.argv[2]
-        # filename = 'data/df_order_test.csv'
-        df_order_test = pd.read_csv(filename)
-        for c in df_order_test.columns:
-            if '_id' in c:
-                df_order_test[c] = df_order_test[c].apply(str)
-        features = load(open('models/featureList.pkl', 'rb'))
-        df_order_test = preprocessing(df_order_test, features)
+#     if mode == 'predict':
+#         filename = sys.argv[2]
+#         # filename = 'data/df_order_test.csv'
+#         df_order_test = pd.read_csv(filename)
+#         for c in df_order_test.columns:
+#             if '_id' in c:
+#                 df_order_test[c] = df_order_test[c].apply(str)
+#         features = load(open('models/featureList.pkl', 'rb'))
+#         df_order_test = preprocessing(df_order_test, features)
 
-        predict(df_order_test)
+#         print('Performing prediction...')
+#         result = predict(df_order_test)
+#         print('Done.')
+#         print('Saving prediction output to data/result.csv ...')
+#         result.to_csv('data/result.csv', index=False)
+#         print('Done.')
         
         
 

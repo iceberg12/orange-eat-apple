@@ -5,7 +5,7 @@
 processed_data_checkpoint/*
 AutoML_*
 catboost_info*
-utils/__pycache__
+**/__pycache__
 
 **/*.log
 # **/settings.json
