@@ -163,35 +163,35 @@ def create_unittest_data(df_order, df_label, test_customer_id):
     df_label_test.to_csv('data/df_label_test.csv', index=False)
     return
 
-# if __name__ == '__main__':
-#     mode = sys.argv[1]
+if __name__ == '__main__':
+    mode = sys.argv[1]
     
-#     if mode == 'train':
-#         df_order, df_label, onehot_features = load_data()
-#         data = preprocessing(df_order, onehot_features)
-#         data = data.merge(df_label, on='customer_id')
+    if mode == 'train':
+        df_order, df_label, onehot_features = load_data()
+        data = preprocessing(df_order, onehot_features)
+        data = data.merge(df_label, on='customer_id')
 
-#         print('Training model and creating test cases ...')
-#         _, test_customer_id = train_model(data, target='is_returning_customer')
-#         create_unittest_data(df_order, df_label, test_customer_id)
-#         print('Done')
+        print('Training model and creating test cases ...')
+        _, test_customer_id = train_model(data, target='is_returning_customer')
+        create_unittest_data(df_order, df_label, test_customer_id)
+        print('Done')
 
-#     if mode == 'predict':
-#         filename = sys.argv[2]
-#         # filename = 'data/df_order_test.csv'
-#         df_order_test = pd.read_csv(filename)
-#         for c in df_order_test.columns:
-#             if '_id' in c:
-#                 df_order_test[c] = df_order_test[c].apply(str)
-#         features = load(open('models/featureList.pkl', 'rb'))
-#         df_order_test = preprocessing(df_order_test, features)
+    if mode == 'predict':
+        filename = sys.argv[2]
+        # filename = 'data/df_order_test.csv'
+        df_order_test = pd.read_csv(filename)
+        for c in df_order_test.columns:
+            if '_id' in c:
+                df_order_test[c] = df_order_test[c].apply(str)
+        features = load(open('models/featureList.pkl', 'rb'))
+        df_order_test = preprocessing(df_order_test, features)
 
-#         print('Performing prediction...')
-#         result = predict(df_order_test)
-#         print('Done.')
-#         print('Saving prediction output to data/result.csv ...')
-#         result.to_csv('data/result.csv', index=False)
-#         print('Done.')
+        print('Performing prediction...')
+        result = predict(df_order_test)
+        print('Done.')
+        print('Saving prediction output to data/result.csv ...')
+        result.to_csv('data/result.csv', index=False)
+        print('Done.')
         
         
 
